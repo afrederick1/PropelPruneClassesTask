@@ -43,6 +43,7 @@ class PropelPruneClassesTask extends sfBaseTask {
 			return;
 		}
 		$contents = fread($fp, filesize($schemaXmlFile));
+		fclose($fp);
 		$xml = new SimpleXMLElement($contents);
 		foreach ($xml->table as $table) {
 			$rawTableName = $table['name'];
