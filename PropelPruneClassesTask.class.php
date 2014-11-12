@@ -13,10 +13,10 @@ class PropelPruneClassesTask extends sfBaseTask {
 		$this->name      = 'prune-classes';
 		$this->briefDescription = 'Removes unused model, filter and form classes';
 		$this->addOptions(array(
-      new sfCommandOption('application', null, sfCommandOption::PARAMETER_REQUIRED, 'The application name', 'frontend'),
+      	new sfCommandOption('application', null, sfCommandOption::PARAMETER_REQUIRED, 'The application name', 'frontend'),
 	    new sfCommandOption('env', null, sfCommandOption::PARAMETER_REQUIRED, 'The environment', 'prod'),
 	    new sfCommandOption('exclude', null, sfCommandOption::PARAMETER_OPTIONAL, 'A space delimited list of files to exclude from removal', "BaseForm.class.php BaseFormPropel.class.php BaseFormFilterPropel.class.php"),
-	    new sfCommandOption('schema', null, sfCommandOption::PARAMETER_OPTIONAL, 'Absolute path to target schema XML file to process, leave blank to use default schema file name and location', null),
+	    new sfCommandOption('schema', null, sfCommandOption::PARAMETER_OPTIONAL, 'Absolute path to target schema XML or YML file to process, leave blank to use default schema file name and location', null),
 		));
 	}
 	
@@ -37,18 +37,48 @@ class PropelPruneClassesTask extends sfBaseTask {
 		else
 			$schemaXmlFile = sfConfig::get('sf_config_dir')."/schema.xml";
 			
-		$fp = fopen($schemaXmlFile, "r");
-		if (!$fp) {
-			$this->logBlock("The file $schemaXmlFile could not be opened.", 'ERROR_LARGE');
-			return;
-		}
-		$contents = fread($fp, filesize($schemaXmlFile));
-		fclose($fp);
-		$xml = new SimpleXMLElement($contents);
-		foreach ($xml->table as $table) {
-			$rawTableName = $table['name'];
-			$this->tableNames[] = str_replace(' ', '', ucwords(str_replace('_', ' ', $rawTableName)));
-		}
+		$schema_type = pathinfo($schemaFile, PATHINFO_EXTENSION);
+
+        	switch($schema_type) {
+	   		case 'xml':	
+    			fp = fopen($schemaFile, "r");
+                if (!$fp) {
+                    $this->logBlock("The file $schemaFile could not be opened.", 'ERROR_LARGE');
+                    return;
+                }
+                $contents = fread($fp, filesize($schemaFile));
+                fclose($fp);
+                $xml = new SimpleXMLElement($contents);
+
+                foreach ($xml->table as $table) {
+                    $rawTableName = $table['name'];
+                    if($table['phpName'])
+                        $this->tableNames[] = $table['phpName'];
+                    else
+                        $this->tableNames[] = str_replace(' ', '', ucwords(str_replace('_', ' ', $rawTableName)));
+                }
+
+                break;
+            case 'yml':
+                if(!file_exists($options['schema'])) {
+                    $this->logBlock("The file $schemaFile could not be opened.", 'ERROR_LARGE');
+                    return;
+                }
+                $yaml = sfYaml::load($schemaFile);
+
+                foreach (array_keys($yaml['propel']) as $table) {
+                    $rawTableName = $table;
+                    if(substr($rawTableName, 0, 1) != '_')
+                    {
+                        if($yaml['propel'][$rawTableName]['_attributes']['phpName'])
+                            $this->tableNames[] = $yaml['propel'][$table]['_attributes']['phpName'];
+                        else
+                            $this->tableNames[] = str_replace(' ', '', ucwords(str_replace('_', ' ', $rawTableName)));
+                    }
+                }
+
+                break;
+        }
 		
 		//Target directories
 		$libDir = sfConfig::get('sf_lib_dir');
